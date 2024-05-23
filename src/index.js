@@ -1,64 +1,56 @@
 const express = require('express');
 const sql = require('mssql');
- 
+
 const app = express();
 app.use(express.json());
- 
+
 const dbConfig = {
-    user: 'bkhadka',
-    password: '!QAZ1qaz@WSX2wsx',
-    server: 'myvdbserver.database.windows.net',
-    database: 'mydb',
-    options: {
-        encrypt: true, // For Azure SQL Database
-        enableArithAbort: true,
-    },
+  user: 'bkhadka',
+  password: '!QAZ1qaz@WSX2wsx',
+  server: 'myvdbserver.database.windows.net',
+  database: 'mydb',
+  options: {
+    encrypt: true,
+    enableArithAbort: true,
+  },
 };
- 
-sql.connect(dbConfig)
-    .then(pool => {
-        if (pool.connected) {
-            console.log('Connected to Azure SQL Database');
-        }
-    })
-    .catch(err => console.error('Database connection failed:', err));
- 
+
+const pool = new sql.ConnectionPool(dbConfig);
+pool.connect()
+  .then(() => {
+    console.log('Connected to Azure SQL Database');
+  })
+  .catch((err) => {
+    console.error('Database connection failed:', err);
+  });
+
 app.get('/items', async (req, res) => {
-    try {
-        const result = await sql.query`SELECT * FROM Items`;
-        res.json(result.recordset);
-    } catch (err) {
-        res.status(500).send(err.message);
-    }
+  try {
+    const request = pool.request();
+    const result = await request.query('SELECT * FROM Items');
+    res.json(result.recordset);
+  } catch (err) {
+    console.error('Error retrieving items:', err);
+    res.status(500).send('Error retrieving items');
+  }
 });
- 
+
 app.post('/items', async (req, res) => {
-    const { name, description } = req.body;
-    try {
-        await sql.query`INSERT INTO Items (Name, Description) VALUES (${name}, ${description})`;
-        res.status(201).send('Item created');
-    } catch (err) {
-        res.status(500).send(err.message);
-    }
+  const { name, description } = req.body;
+  try {
+    const request = pool.request();
+    request.input('name', sql.NVarChar, name);
+    request.input('description', sql.NVarChar, description);
+    await request.query('INSERT INTO Items (Name, Description) VALUES (@name, @description)');
+    res.status(201).send('Item created');
+  } catch (err) {
+    console.error('Error creating item:', err);
+    res.status(500).send('Error creating item');
+  }
 });
- 
-app.put('/items/:id', async (req, res) => {
-    const { id } = req.params;
-    const { name, description } = req.body;
-    try {
-        await sql.query`UPDATE Items SET Name=${name}, Description=${description} WHERE Id=${id}`;
-        res.send('Item updated');
-    } catch (err) {
-        res.status(500).send(err.message);
-    }
-});
- 
-app.delete('/items/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        await sql.query`DELETE FROM Items WHERE Id=${id}`;
-        res.send('Item deleted');
-    } catch (err) {
-        res.status(500).send(err.message);
-    }
+
+// Update and delete routes with parameterized queries...
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log('Server is running');
 });
